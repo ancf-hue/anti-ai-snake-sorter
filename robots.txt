@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /sorter.webp
+
+Sitemap: https://anti-ai-snake-sorter.vercel.app/sitemap.xml
