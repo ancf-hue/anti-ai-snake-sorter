@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#050510" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+    <!-- Предзагрузка критичных картинок -->
+    <link rel="preload" as="image" href="sorter.webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="logo.webp" fetchpriority="high" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Google Fonts: асинхронно, не блокирует рендер -->
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
+          media="print" onload="this.media='all'" />
+    <noscript>
+        <link rel="stylesheet"
+              href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" />
+    </noscript>
+
+    <title>Змея Сортировщик — почта</title>
+
+    <!-- three.js БОЛЬШЕ НЕ ЗДЕСЬ. Он подключён в самом низу body. -->
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            margin: 0; padding: 0;
+            overflow: hidden;
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: auto;
+            background: #050510;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            color: #fff;
+            user-select: none; -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            inset: 0;
+        }
+        canvas {
+            position: fixed !important; top: 0; left: 0; z-index: 1;
+            width: 100vw; height: 100vh; display: none;
+            will-change: transform;
+        }
+        canvas.game-active { display: block !important; }
+        .page {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.5s, transform 0.5s;
+            transform: scale(0.95); z-index: 100;
+            overflow-y: auto; padding: 20px;
+            background: rgba(5, 5, 16, 0.95);
+        }
+        .page.active { opacity: 1; pointer-events: all; transform: scale(1); }
+        #page-game { background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+        #page-description {
+            /* Плейсхолдер-фон, чтобы страница не была пустой пока грузится sorter.webp */
+            background-color: #0f1d38;
+            background-image:
+                url('sorter.webp'),
+                linear-gradient(135deg, #1a2847 0%, #0f1d38 40%, #0a1428 100%);
+            background-size: cover, cover;
+            background-position: center center, center center;
+            background-repeat: no-repeat, no-repeat;
+            position: relative;
+            -webkit-backdrop-filter: none !important;
+            backdrop-filter: none !important;
+        }
+        #page-description::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(
+                180deg,
+                rgba(5, 10, 25, 0.55) 0%,
+                rgba(10, 20, 40, 0.35) 40%,
+                rgba(5, 10, 25, 0.6) 100%
+            );
+            pointer-events: none;
+        }
+        .page-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, rgba(20, 40, 60, 0.85) 0%, rgba(5, 5, 16, 0.95) 100%);
+            backdrop-filter: blur(8px); z-index: -1;
+        }
+
+        /* Логотипы: фиксированные размеры + async-декодирование, без layout shift */
+        .logo-img {
+            display: block;
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(80,160,255,0.3);
+            border: 2px solid rgba(255,255,255,0.15);
+            z-index: 1;
+            image-rendering: -webkit-optimize-contrast;
+        }
+
+        .lang-btn-3d {
+            position: absolute !important;
+            top: calc(20px + env(safe-area-inset-top)) !important;
+            right: calc(20px + env(safe-area-inset-right)) !important;
+            left: auto !important; margin: 0 !important;
+            padding: 12px 24px; font-size: 16px; font-weight: 800;
+            color: #d0e8ff; background: rgba(80, 150, 255, 0.15);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(100, 180, 255, 0.4);
+            border-radius: 16px; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 8px 32px rgba(80, 150, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 40px rgba(80, 150, 255, 0.15);
+            text-transform: uppercase; letter-spacing: 1.5px;
+            z-index: 200 !important;
+            animation: glassPulseLang 3s ease-in-out infinite;
+        }
+        @keyframes glassPulseLang {
+            0%, 100% { box-shadow: 0 8px 32px rgba(80, 150, 255, 0.2), inset 0 1px 0 rgba(255,255,255,0.3), 0 0 40px rgba(80,150,255,0.15); border-color: rgba(100,180,255,0.4); }
+            50% { box-shadow: 0 8px 48px rgba(100, 180, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.5), 0 0 70px rgba(80,150,255,0.3); border-color: rgba(150,200,255,0.7); }
+        }
+        .lang-btn-3d:hover { transform: translateY(-3px) scale(1.05); border-color: rgba(150, 200, 255, 0.9); color: #fff; text-shadow: 0 0 12px rgba(100, 180, 255, 0.9); animation: none; }
+        .lang-btn-3d:active { transform: translateY(1px) scale(0.97); }
+
+        .glass-btn-3d {
+            position: relative; padding: 18px 48px; font-size: 18px; font-weight: 800;
+            color: #d0e8ff; background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(100, 180, 255, 0.25); border-radius: 20px; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 8px 32px rgba(100, 180, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+            text-transform: uppercase; letter-spacing: 1.5px; overflow: hidden; margin: 12px; z-index: 1;
+            animation: glassPulse 3s ease-in-out infinite; touch-action: manipulation;
+        }
+        .glass-btn-3d::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+            pointer-events: none; mix-blend-mode: overlay; animation: shineMove 6s linear infinite;
+        }
+        .glass-btn-3d::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.06), transparent);
+            border-radius: 20px 20px 0 0; pointer-events: none;
+        }
+        @keyframes shineMove { 0% { transform: translate(-20%, -20%) rotate(0deg); } 100% { transform: translate(20%, 20%) rotate(10deg); } }
+        @keyframes glassPulse {
+            0%, 100% { box-shadow: 0 8px 32px rgba(100, 180, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15); border-color: rgba(100, 180, 255, 0.25); }
+            50% { box-shadow: 0 8px 48px rgba(100, 180, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25); border-color: rgba(100, 180, 255, 0.45); }
+        }
+        .glass-btn-3d:hover {
+            transform: translateY(-4px) scale(1.03); border-color: rgba(100, 180, 255, 0.7);
+            color: #fff; text-shadow: 0 0 12px rgba(100, 180, 255, 0.4);
+            box-shadow: 0 12px 40px rgba(100, 180, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.25); animation: none;
+        }
+        .glass-btn-3d:active { transform: translateY(1px) scale(0.97); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.3); }
+
+        .glass-btn-3d.secondary {
+            color: #c0d0d0; border-color: rgba(255, 255, 255, 0.12);
+            animation: glassPulseSecondary 3s ease-in-out infinite;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        @keyframes glassPulseSecondary {
+            0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.12); }
+            50% { box-shadow: 0 8px 48px rgba(255, 255, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.25); }
+        }
+        .glass-btn-3d.secondary:hover {
+            border-color: rgba(255, 255, 255, 0.5); color: #fff;
+            text-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
+            box-shadow: 0 12px 40px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.2); animation: none;
+        }
+
+        .glass-btn-3d.primary-submit {
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(255, 80, 80, 0.25), rgba(200, 40, 40, 0.15));
+            border-color: rgba(255, 120, 120, 0.7);
+            text-shadow: 0 0 15px rgba(255, 80, 80, 0.4);
+            box-shadow: 0 0 35px rgba(255, 80, 80, 0.25), 0 0 60px rgba(255, 80, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+            animation: redPulse 2s ease-in-out infinite; padding: 16px 40px; font-size: 17px;
+        }
+        @keyframes redPulse {
+            0%, 100% { box-shadow: 0 0 35px rgba(255, 80, 80, 0.25), 0 0 60px rgba(255, 80, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -2px 0 rgba(0, 0, 0, 0.2); }
+            50% { box-shadow: 0 0 50px rgba(255, 100, 100, 0.4), 0 0 90px rgba(255, 80, 80, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -2px 0 rgba(0, 0, 0, 0.2); }
+        }
+        .glass-btn-3d.primary-submit:hover { border-color: rgba(255, 180, 180, 0.9); color: #fff; animation: none; box-shadow: 0 0 60px rgba(255, 100, 100, 0.5), 0 0 100px rgba(255, 80, 80, 0.25); }
+
+        .touch-btn {
+            font-size: 28px !important; padding: 12px 22px !important; margin: 4px !important;
+            min-width: 60px; min-height: 60px; display: flex; align-items: center; justify-content: center;
+            border-radius: 16px !important; background: rgba(255, 60, 60, 0.28) !important;
+            border-color: rgba(255, 100, 100, 0.7) !important; color: #ffc0c0 !important;
+            box-shadow: 0 4px 20px rgba(255, 50, 50, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+            animation: redBtnPulse 2s ease-in-out infinite !important;
+            touch-action: manipulation !important;
+            text-shadow: 0 0 8px rgba(255, 100, 100, 0.4);
+        }
+        @keyframes redBtnPulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(255, 50, 50, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+            50% { box-shadow: 0 4px 32px rgba(255, 80, 80, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.22); }
+        }
+        .touch-btn:active, .touch-btn.held {
+            transform: scale(0.92) !important;
+            box-shadow: 0 2px 8px rgba(255, 50, 50, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+            background: rgba(255, 60, 60, 0.5) !important;
+        }
+
+        .strike-btn {
+            background: rgba(255, 30, 30, 0.45) !important;
+            border-color: rgba(255, 90, 90, 0.95) !important;
+            color: #fff0f0 !important;
+            box-shadow: 0 4px 28px rgba(255, 40, 40, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+            animation: strikePulse 1.6s ease-in-out infinite !important;
+            min-width: 88px; min-height: 88px; font-size: 36px !important;
+            text-shadow: 0 0 12px rgba(255, 80, 80, 0.7);
+        }
+        @keyframes strikePulse {
+            0%, 100% { box-shadow: 0 4px 28px rgba(255, 40, 40, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+            50% { box-shadow: 0 4px 48px rgba(255, 60, 60, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+        }
+        .strike-btn:active, .strike-btn.held { transform: scale(0.9) !important; background: rgba(255, 20, 20, 0.7) !important; }
+
+        .title-main {
+            font-size: clamp(36px, 8vw, 64px); font-weight: 800;
+            background: linear-gradient(135deg, #66ddff 0%, #3399ff 50%, #2255cc 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(80, 160, 255, 0.3);
+            margin-bottom: 16px; text-align: center; line-height: 1.1; z-index: 1;
+        }
+        .subtitle {
+            font-size: clamp(16px, 3vw, 22px); color: #d0e8ff; text-align: center;
+            max-width: 620px; line-height: 1.6; margin-bottom: 20px; padding: 0 20px;
+            z-index: 1; position: relative; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+        }
+        .support-block {
+            width: 100%; max-width: 95vw; background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px; padding: 10px 20px; z-index: 1;
+            display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+            gap: 10px; font-size: 13px; color: #aabbcc; text-align: center; margin-top: 20px;
+        }
+        .support-block .highlight { color: #66ccff; font-weight: 800; }
+        .support-block .phone { color: #fff; letter-spacing: 0.5px; font-weight: bold; }
+        .support-block .copy-btn {
+            background: rgba(100, 180, 255, 0.12); border: 1px solid #66aaff;
+            color: #88ccff; padding: 4px 12px; border-radius: 8px; cursor: pointer;
+            font-size: 12px; font-weight: bold; transition: all 0.2s;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .support-block .copy-btn:hover { background: rgba(100, 180, 255, 0.25); transform: scale(1.05); }
+        .support-block a { color: #88ddff; text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 4px; }
+
+        #game-hud {
+            position: absolute;
+            top: calc(18px + env(safe-area-inset-top));
+            left: calc(18px + env(safe-area-inset-left));
+            right: calc(18px + env(safe-area-inset-right));
+            display: flex; justify-content: space-between; align-items: flex-start;
+            pointer-events: none; z-index: 50; gap: 10px;
+        }
+        .hud-panel {
+            background: linear-gradient(135deg, rgba(16, 24, 40, 0.78), rgba(8, 14, 26, 0.62));
+            backdrop-filter: blur(14px) saturate(160%);
+            -webkit-backdrop-filter: blur(14px) saturate(160%);
+            border: 1px solid rgba(120, 180, 255, 0.18);
+            border-radius: 18px; padding: 12px 18px; color: #fff;
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            pointer-events: auto;
+        }
+        .hud-col { display: flex; flex-direction: column; gap: 8px; }
+        .hud-row { display: flex; align-items: center; gap: 10px; }
+        .hud-label { color: #93a6bd; font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; font-weight: 600; }
+        .hud-score { font-size: 24px; font-weight: 800; color: #ffdd88; text-shadow: 0 0 12px rgba(255, 221, 136, 0.35); }
+        .hud-score-total { font-size: 15px; color: #8d9bb0; font-weight: 700; }
+        .hud-progress {
+            width: 200px; height: 10px; border-radius: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(120, 180, 255, 0.25);
+            overflow: hidden;
+        }
+        .hud-progress-fill {
+            height: 100%; width: 0%; border-radius: 6px;
+            background: linear-gradient(90deg, #66ddff, #3388ff 55%, #ffdd66);
+            box-shadow: 0 0 14px rgba(100, 180, 255, 0.7);
+            transition: width 0.25s ease;
+        }
+        .hint-good { color: #66dd88; font-weight: 700; font-size: 13px; }
+        .hint-bad { color: #ff7766; font-weight: 700; font-size: 13px; }
+        .hud-timer {
+            font-size: 26px; font-weight: 800; color: #88ddff;
+            text-shadow: 0 0 12px rgba(136, 221, 255, 0.35); min-width: 96px; text-align: center;
+        }
+        .hud-timer.warning { color: #ff8866; text-shadow: 0 0 14px rgba(255, 136, 102, 0.6); animation: timerBlink 0.9s ease-in-out infinite; }
+        @keyframes timerBlink { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
+
+        #charge-ui {
+            position: absolute; bottom: calc(175px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+            z-index: 56; display: flex; flex-direction: column; align-items: center; gap: 6px;
+            pointer-events: none;
+        }
+        #charge-label { font-size: 14px; font-weight: 800; color: #88ccff; text-shadow: 0 0 8px rgba(80, 160, 255, 0.5); }
+        #charge-bar-bg { width: 230px; height: 15px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(100, 180, 255, 0.4); border-radius: 9px; overflow: hidden; }
+        #charge-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #66ddff, #3388ff); border-radius: 9px; transition: width 0.05s linear; }
+
+        .result-score { font-size: clamp(48px, 10vw, 80px); font-weight: 800; color: #ffdd88; text-shadow: 0 0 30px rgba(255, 221, 136, 0.5); margin: 20px 0; }
+        .result-label { font-size: 20px; color: #99aacc; text-transform: uppercase; letter-spacing: 2px; }
+
+        .red-snake-reward {
+            font-size: clamp(60px, 12vw, 100px) !important;
+            filter: hue-rotate(320deg) saturate(4) brightness(1.2);
+            text-shadow: 0 0 40px rgba(255, 0, 0, 0.9), 0 0 80px rgba(255, 50, 50, 0.6);
+            animation: snakeGlow 2s ease-in-out infinite alternate; margin: 10px 0;
+        }
+        @keyframes snakeGlow {
+            from { text-shadow: 0 0 30px rgba(255, 0, 0, 0.6); transform: scale(1); }
+            to { text-shadow: 0 0 60px rgba(255, 50, 50, 1), 0 0 100px rgba(255, 0, 0, 0.4); transform: scale(1.05); }
+        }
+        .reward-text {
+            font-size: clamp(18px, 4vw, 26px); color: #ff6666; font-weight: 800;
+            text-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+            margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .confetti { position: fixed; top: -10px; z-index: 9999; pointer-events: none; border-radius: 2px; }
+
+        .pop-text {
+            position: fixed; z-index: 300; pointer-events: none;
+            font-weight: 800; font-size: 26px; letter-spacing: 0.5px;
+            text-shadow: 0 0 14px currentColor, 0 2px 6px rgba(0,0,0,0.6);
+            animation: popUp 0.9s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+            transform: translate(-50%, -50%);
+        }
+        @keyframes popUp {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            22%  { opacity: 1; transform: translate(-50%, -80%) scale(1.18); }
+            100% { opacity: 0; transform: translate(-50%, -190%) scale(0.9); }
+        }
+
+        #touch-controls {
+            position: absolute;
+            bottom: calc(90px + env(safe-area-inset-bottom));
+            left: 0; right: 0;
+            display: flex; justify-content: space-around; align-items: center;
+            padding: 0 12px; z-index: 55; pointer-events: none; flex-wrap: wrap; gap: 6px;
+        }
+        #touch-controls > div { pointer-events: auto; display: flex; gap: 8px; align-items: center; }
+
+        @media (max-width: 700px) {
+            .lang-btn-3d { top: calc(15px + env(safe-area-inset-top)) !important; right: calc(15px + env(safe-area-inset-right)) !important; padding: 10px 18px; font-size: 14px; }
+            #game-hud { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); }
+            .hud-panel { padding: 8px 12px; border-radius: 14px; }
+            .hud-score { font-size: 18px; }
+            .hud-timer { font-size: 19px; min-width: 74px; }
+            .hud-progress { width: 128px; height: 8px; }
+            .hint-good, .hint-bad { font-size: 11px; }
+            .hud-label { font-size: 10px; }
+            .glass-btn-3d { padding: 14px 32px; font-size: 16px; }
+            .touch-btn { font-size: 22px !important; padding: 10px 16px !important; min-width: 50px; min-height: 50px; }
+            .strike-btn { min-width: 70px; min-height: 70px; font-size: 28px !important; }
+            #touch-controls { bottom: calc(80px + env(safe-area-inset-bottom)); padding: 0 6px; gap: 4px; }
+            #charge-ui { bottom: calc(150px + env(safe-area-inset-bottom)); }
+            #charge-bar-bg { width: 180px; }
+        }
+
+        @media (max-width: 420px) {
+            #page-description .logo-img { width: 96px; height: 96px; }
+            .hud-progress { width: 90px; }
+        }
+
+        @media (max-width: 360px) {
+            #page-game .logo-img { display: none; }
+            .hud-timer { font-size: 16px; min-width: 64px; }
+            .touch-btn { min-width: 44px; min-height: 44px; font-size: 18px !important; }
+            .strike-btn { min-width: 60px; min-height: 60px; font-size: 24px !important; }
+        }
+
+        @media (max-height: 500px) and (orientation: landscape) {
+            #game-hud { top: 6px; }
+            #touch-controls { bottom: 8px; }
+            #charge-ui { bottom: 70px; }
+            #page-game .logo-img { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+            .confetti { display: none !important; }
+        }
+
+        #webgl-error {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 50, 50, 0.95);
+            color: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 10000;
+            font-size: 18px;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="webgl-error">
+        <h2>⚠️ Ошибка WebGL</h2>
+        <p>Ваш браузер не поддерживает WebGL или он отключён.</p>
+        <p>Попробуйте:</p>
+        <ul style="text-align: left; margin: 20px 0;">
+            <li>Обновить браузер</li>
+            <li>Включить аппаратное ускорение</li>
+            <li>Использовать Chrome, Firefox или Edge</li>
+        </ul>
+    </div>
+
+    <div id="page-description" class="page active">
+        <button class="lang-btn-3d" id="langToggleBtn" onclick="toggleLanguage()">RU / EN</button>
+
+        <!-- Логотип: WebP вместо ICO, фикс. размеры, async-декодирование, fallback -->
+        <img src="logo.webp" alt="Логотип" class="logo-img"
+             width="144" height="144" decoding="async" fetchpriority="high"
+             onerror="this.onerror=null;this.src='favicon.ico';"
+             style="width:144px;height:144px;margin-bottom:16px;">
+
+        <h1 class="title-main" id="txt-title1">Змея</h1>
+        <h1 class="title-main" style="font-size:clamp(32px,7vw,56px);margin-top:-10px;" id="txt-title2">И</h1>
+        <h1 class="title-main" style="font-size:clamp(32px,7vw,56px);margin-top:-10px;" id="txt-title3">Сортировщик</h1>
+        <div style="flex-grow:1;"></div>
+        <button class="glass-btn-3d" id="txt-startBtn" style="margin:0 auto 16px auto;z-index:1;">▶ На старт!</button>
+        <div class="support-block">
+            <span class="highlight" id="txt-supportTitle">🤝 ПОДДЕРЖАТЬ ПРОЕКТ 💙</span>
+            <span id="txt-supportText1">Приложение бесплатное.</span>
+            <span id="txt-supportText2">Перевод: <strong class="phone">8-920-227-56-76</strong></span>
+            <button class="copy-btn" id="txt-copyBtn" onclick="copyPhone()">📋 Копировать</button>
+            <span id="txt-thanks">❤️ Спасибо!</span>
+            <a href="https://ancf-hue.github.io/" target="_blank" id="txt-catalog">👉 Каталог Anti-AI Shield</a>
+        </div>
+    </div>
+
+    <div id="page-game" class="page" style="justify-content:flex-start;">
+        <img src="logo.webp" alt="Логотип" class="logo-img"
+             width="96" height="96" decoding="async"
+             onerror="this.onerror=null;this.src='favicon.ico';"
+             style="position:absolute;top:15px;left:50%;transform:translateX(-50%);width:96px;height:96px;border-radius:16px;z-index:60;box-shadow:0 4px 12px rgba(0,0,0,0.5);border:2px solid rgba(255,255,255,0.15);">
+        <div id="game-hud">
+            <div class="hud-panel hud-col">
+                <div class="hud-row">
+                    <span class="hud-label" id="txt-hud-score-label">Выбито:</span>
+                    <span class="hud-score" id="hud-score-box">📦 <span id="score">0</span><span class="hud-score-total">/15</span></span>
+                </div>
+                <div class="hud-progress"><div class="hud-progress-fill" id="scoreProgress"></div></div>
+                <div class="hud-row">
+                    <span class="hint-good" id="txt-hint-good">🟢 Не трогай</span>
+                    <span class="hint-bad" id="txt-hint-bad">🔴 Выбивай</span>
+                </div>
+            </div>
+            <div class="hud-panel">
+                <span class="hud-timer" id="timerDisplay">⏱ 3:00</span>
+            </div>
+        </div>
+        <div id="charge-ui">
+            <div id="charge-label">⚡ Готов к удару!</div>
+            <div id="charge-bar-bg"><div id="charge-bar-fill"></div></div>
+        </div>
+        <div id="touch-controls">
+            <div>
+                <button class="touch-btn glass-btn-3d" data-action="left">◀</button>
+                <button class="touch-btn glass-btn-3d" data-action="right">▶</button>
+            </div>
+            <div>
+                <button class="touch-btn glass-btn-3d strike-btn" data-action="strike">⚡</button>
+            </div>
+            <div>
+                <button class="touch-btn glass-btn-3d" data-action="forward">▲</button>
+                <button class="touch-btn glass-btn-3d" data-action="backward">▼</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-result" class="page">
+        <div class="page-bg"></div>
+        <img src="logo.webp" alt="Логотип" class="logo-img"
+             width="128" height="128" decoding="async"
+             onerror="this.onerror=null;this.src='favicon.ico';"
+             style="width:128px;height:128px;margin-bottom:16px;border-radius:20px;box-shadow:0 4px 12px rgba(0,0,0,0.3);border:2px solid rgba(255,255,255,0.15);">
+        <div class="result-label" id="result-label">⏱ Время вышло!</div>
+        <div class="result-score" id="result-emoji">📦</div>
+
+        <div id="win-block" style="display: none; text-align: center; width: 100%; max-width: 500px;">
+            <div class="reward-text" id="reward-text">🎁 Награда: Красная змея!</div>
+            <p class="subtitle" id="result-text-win">Вы выбили 15 лишних посылок! Настоящий мастер почты!</p>
+
+            <button class="glass-btn-3d primary-submit" id="txt-goToBoard" onclick="goToLeaderboard()">
+                🏆 Отправить на Доску почёта →
+            </button>
+
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 8px;">
+                <button class="glass-btn-3d secondary" id="txt-playAgain2" onclick="startGame()" style="padding: 12px 24px; font-size: 14px;">🔄 Ещё раз</button>
+                <button class="glass-btn-3d secondary" id="txt-menu2" onclick="showPage('page-description')" style="padding: 12px 24px; font-size: 14px;">🏠 В меню</button>
+            </div>
+        </div>
+
+        <div id="lose-block" style="display: none; text-align: center;">
+            <p class="subtitle" id="result-text-lose">Посылки разъехались. Попробуйте ещё раз!</p>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px;">
+                <button class="glass-btn-3d" id="txt-playAgain" onclick="startGame()">🔄 Играть снова</button>
+                <button class="glass-btn-3d secondary" id="txt-menu" onclick="showPage('page-description')">🏠 В меню</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         three.js подключается ЗДЕСЬ, а не в <head>.
+         Это снимает блокировку первой отрисовки: HTML и картинки
+         начинают грузиться сразу, а библиотека — параллельно.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        if (!Math.hypot) {
+            Math.hypot = function() {
+                var sum = 0, largest = 0;
+                for (var i = 0; i < arguments.length; i++) {
+                    var v = Math.abs(arguments[i]);
+                    if (largest < v) {
+                        sum += (largest / v) * (largest / v);
+                        largest = v;
+                    } else {
+                        sum += (v / largest) * (v / largest);
+                    }
+                }
+                return largest === 1/0 ? 1/0 : largest * Math.sqrt(sum);
+            };
+        }
+
+        if (!window.performance) {
+            window.performance = {};
+        }
+        if (!window.performance.now) {
+            window.performance.now = function() {
+                return Date.now();
+            };
+        }
+
+        function isWebGLSupported() {
+            try {
+                var canvas = document.createElement('canvas');
+                return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            } catch (e) {
+                return false;
+            }
+        }
+
+        if (!isWebGLSupported()) {
+            document.getElementById('webgl-error').style.display = 'block';
+            console.error('WebGL не поддерживается');
+        }
+
+        THREE.OrbitControls = function(object, domElement) {
+            this.object = object; this.domElement = domElement; this.enabled = true;
+            this.target = new THREE.Vector3(); this.minDistance = 0; this.maxDistance = Infinity;
+            this.minPolarAngle = 0; this.maxPolarAngle = Math.PI; this.enableDamping = false;
+            this.dampingFactor = 0.05; this.enableZoom = true; this.enableRotate = true; this.enablePan = false;
+            var scope = this; var STATE = { NONE: -1, ROTATE: 0 }; var state = STATE.NONE;
+            var spherical = new THREE.Spherical(); var sphericalDelta = new THREE.Spherical();
+            var rotateStart = new THREE.Vector2(); var rotateEnd = new THREE.Vector2();
+            var rotateDelta = new THREE.Vector2(); var offset = new THREE.Vector3();
+            var quat = new THREE.Quaternion().setFromUnitVectors(object.up, new THREE.Vector3(0, 1, 0));
+            var quatInverse = quat.clone().invert();
+            this.update = function() {
+                offset.copy(scope.object.position).sub(scope.target); offset.applyQuaternion(quat);
+                spherical.setFromVector3(offset); spherical.theta += sphericalDelta.theta;
+                spherical.phi += sphericalDelta.phi;
+                spherical.phi = Math.max(scope.minPolarAngle, Math.min(scope.maxPolarAngle, spherical.phi));
+                spherical.makeSafe();
+                spherical.radius = Math.max(scope.minDistance, Math.min(scope.maxDistance, spherical.radius));
+                offset.setFromSpherical(spherical); offset.applyQuaternion(quatInverse);
+                scope.object.position.copy(scope.target).add(offset); scope.object.lookAt(scope.target);
+                if (scope.enableDamping) { sphericalDelta.theta *= (1 - scope.dampingFactor); sphericalDelta.phi *= (1 - scope.dampingFactor); }
+                else { sphericalDelta.set(0, 0, 0); }
+            };
+            function rotateLeft(angle) { sphericalDelta.theta -= angle; }
+            function rotateUp(angle) { sphericalDelta.phi -= angle; }
+            function onMouseDown(event) {
+                if (!scope.enabled || !scope.enableRotate) return; event.preventDefault();
+                state = STATE.ROTATE; rotateStart.set(event.clientX, event.clientY);
+                document.addEventListener('mousemove', onMouseMove, false);
+                document.addEventListener('mouseup', onMouseUp, false);
+            }
+            function onMouseMove(event) {
+                if (!scope.enabled || state !== STATE.ROTATE) return; event.preventDefault();
+                rotateEnd.set(event.clientX, event.clientY); rotateDelta.subVectors(rotateEnd, rotateStart);
+                rotateLeft(2 * Math.PI * rotateDelta.x / domElement.clientWidth);
+                rotateUp(2 * Math.PI * rotateDelta.y / domElement.clientHeight); rotateStart.copy(rotateEnd);
+            }
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove, false);
+                document.removeEventListener('mouseup', onMouseUp, false); state = STATE.NONE;
+            }
+            function onMouseWheel(event) {
+                if (!scope.enabled || !scope.enableZoom) return; event.preventDefault();
+                if (event.deltaY < 0) spherical.radius *= 0.95; else spherical.radius *= 1.05;
+            }
+            function onTouchStart(event) {
+                if (!scope.enabled) return; event.preventDefault();
+                if (event.touches.length === 1 && scope.enableRotate) {
+                    state = STATE.ROTATE; rotateStart.set(event.touches[0].pageX, event.touches[0].pageY);
+                } else if (event.touches.length === 2 && scope.enableZoom) {
+                    var dx = event.touches[0].pageX - event.touches[1].pageX;
+                    var dy = event.touches[0].pageY - event.touches[1].pageY;
+                    rotateStart.set(0, Math.sqrt(dx * dx + dy * dy));
+                }
+            }
+            function onTouchMove(event) {
+                if (!scope.enabled) return; event.preventDefault();
+                if (event.touches.length === 1 && state === STATE.ROTATE) {
+                    rotateEnd.set(event.touches[0].pageX, event.touches[0].pageY);
+                    rotateDelta.subVectors(rotateEnd, rotateStart);
+                    rotateLeft(2 * Math.PI * rotateDelta.x / domElement.clientWidth);
+                    rotateUp(2 * Math.PI * rotateDelta.y / domElement.clientHeight); rotateStart.copy(rotateEnd);
+                } else if (event.touches.length === 2 && scope.enableZoom) {
+                    var dx = event.touches[0].pageX - event.touches[1].pageX;
+                    var dy = event.touches[0].pageY - event.touches[1].pageY;
+                    var distance = Math.sqrt(dx * dx + dy * dy); rotateEnd.set(0, distance);
+                    var factor = rotateEnd.y / rotateStart.y; spherical.radius *= factor; rotateStart.copy(rotateEnd);
+                }
+            }
+            function onTouchEnd() { state = STATE.NONE; }
+            domElement.addEventListener('contextmenu', function(e) { e.preventDefault(); }, false);
+            domElement.addEventListener('mousedown', onMouseDown, false);
+            domElement.addEventListener('wheel', onMouseWheel, { passive: false });
+            domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+            domElement.addEventListener('touchend', onTouchEnd, false);
+            domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+        };
+    </script>
+
+    <script>
+        console.log('Скрипт игры "Змея Сортировщик" загружается...');
+
+        const MAIN_LEADERBOARD_URL = "https://anti-ii-zmeya-vse-igry.vercel.app/";
+        const GAME_NAME_FOR_BOARD = "🐍 - 📦 Змея Сортировщик";
+        const REWARD_SNAKES_ON_WIN = 1;
+
+        let currentLang = 'ru';
+        const translations = {
+            ru: {
+                title1: "Змея", title2: "И", title3: "Сортировщик", startBtn: "▶ На старт!",
+                supportTitle: "🤝 ПОДДЕРЖАТЬ ПРОЕКТ 💙", supportText1: "Приложение бесплатное.",
+                supportText2: "Перевод:", copyBtn: "📋 Копировать", copiedBtn: "✅ Скопировано!",
+                thanks: "❤️ Спасибо!", catalog: "👉 Каталог Anti-AI Shield", hudScore: "Выбито:",
+                hintBad: "🔴 Выбивай", hintGood: "🟢 Не трогай",
+                playAgain: "🔄 Играть снова", playAgain2: "🔄 Ещё раз", menu: "🏠 В меню",
+                goToLeaderboard: "🏆 Отправить на Доску почёта →",
+                chargeReady: "⚡ Готов к удару!", chargeCharging: "⚡ Зарядка... Отпусти!",
+                chargeCooldown: "💤 Отдых...", chargeStrike: "💥 УДАР!",
+                resultWinLabel: "🎉 ПОБЕДА!", resultWinText: "Вы выбили 15 лишних посылок! Настоящий мастер почты!",
+                rewardText: "🎁 Награда: Красная змея!", resultTimeLabel: "⏱ Время вышло!",
+                resultTimeText: "Выбито посылок: {score} из 15. Попробуйте ещё раз!",
+                ttsStart: "Игра началась! Выбивай красные посылки с ленты, не трогай зелёные! Объезжай ящики! Набери 15 очков!",
+                ttsWin: "Поздравляю! Вы мастер сортировки! Награда: Красная змея!",
+                ttsLose: "Время вышло. Выбито посылок: {score}."
+            },
+            en: {
+                title1: "Snake", title2: "And", title3: "Sorter", startBtn: "▶ Start!",
+                supportTitle: "🤝 SUPPORT THE PROJECT 💙", supportText1: "The app is free.",
+                supportText2: "Transfer:", copyBtn: "📋 Copy", copiedBtn: "✅ Copied!",
+                thanks: "❤️ Thank you!", catalog: "👉 Anti-AI Shield Catalog", hudScore: "Knocked:",
+                hintBad: "🔴 Knock off", hintGood: "🟢 Don't touch",
+                playAgain: "🔄 Play Again", playAgain2: "🔄 Again", menu: "🏠 Menu",
+                goToLeaderboard: "🏆 To Hall of Fame →",
+                chargeReady: "⚡ Ready to strike!", chargeCharging: "⚡ Charging... Release!",
+                chargeCooldown: "💤 Resting...", chargeStrike: "💥 STRIKE!",
+                resultWinLabel: "🎉 VICTORY!", resultWinText: "You knocked off 15 wrong parcels! A true post master!",
+                rewardText: "🎁 Reward: Red Snake!", resultTimeLabel: "⏱ Time's Up!",
+                resultTimeText: "Parcels knocked: {score} out of 15. Try again!",
+                ttsStart: "Game started! Knock red parcels off the belt, don't touch green ones! Avoid the crates! Score 15 points!",
+                ttsWin: "Congratulations! You are a sorting master! Reward: Red Snake!",
+                ttsLose: "Time is up. Parcels knocked: {score}."
+            }
+        };
+
+        window.toggleLanguage = function() {
+            currentLang = currentLang === 'ru' ? 'en' : 'ru';
+            document.getElementById('langToggleBtn').textContent = currentLang === 'ru' ? 'RU / EN' : 'EN / RU';
+            updateLanguage();
+        };
+
+        function updateLanguage() {
+            const tr = translations[currentLang];
+            document.getElementById('txt-title1').textContent = tr.title1;
+            document.getElementById('txt-title2').textContent = tr.title2;
+            document.getElementById('txt-title3').textContent = tr.title3;
+            document.getElementById('txt-startBtn').textContent = tr.startBtn;
+            document.getElementById('txt-supportTitle').textContent = tr.supportTitle;
+            document.getElementById('txt-supportText1').textContent = tr.supportText1;
+            document.getElementById('txt-supportText2').innerHTML = `${tr.supportText2} <strong class="phone">8-920-227-56-76</strong>`;
+            document.getElementById('txt-copyBtn').textContent = tr.copyBtn;
+            document.getElementById('txt-thanks').textContent = tr.thanks;
+            document.getElementById('txt-catalog').textContent = tr.catalog;
+            document.getElementById('txt-hud-score-label').textContent = tr.hudScore;
+            document.getElementById('txt-hint-bad').textContent = tr.hintBad;
+            document.getElementById('txt-hint-good').textContent = tr.hintGood;
+            document.getElementById('txt-playAgain').textContent = tr.playAgain;
+            document.getElementById('txt-playAgain2').textContent = tr.playAgain2;
+            document.getElementById('txt-menu').textContent = tr.menu;
+            document.getElementById('txt-menu2').textContent = tr.menu;
+            document.getElementById('txt-goToBoard').textContent = tr.goToLeaderboard;
+        }
+
+        function speakText(textKey, replacements = {}) {
+            if (!('speechSynthesis' in window)) return;
+            try {
+                window.speechSynthesis.cancel();
+                let textToSpeak = translations[currentLang][textKey] || textKey;
+                for (const key in replacements) { textToSpeak = textToSpeak.replace(`{${key}}`, replacements[key]); }
+                const u = new SpeechSynthesisUtterance(textToSpeak);
+                u.lang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+                u.rate = 1.05; u.pitch = 1.0;
+                window.speechSynthesis.speak(u);
+            } catch (e) {}
+        }
+
+        window.copyPhone = function() {
+            const phone = "8-920-227-56-76";
+            if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(phone).then(() => showCopySuccess()).catch(() => fallbackCopy(phone));
+            } else {
+                fallbackCopy(phone);
+            }
+        };
+
+        function showCopySuccess() {
+            const btn = document.getElementById('txt-copyBtn');
+            if (btn) {
+                const tr = translations[currentLang];
+                btn.textContent = tr.copiedBtn;
+                btn.style.background = "rgba(100,180,255,0.4)";
+                btn.style.color = "#fff";
+                setTimeout(() => {
+                    btn.textContent = tr.copyBtn;
+                    btn.style.background = "rgba(100,180,255,0.12)";
+                    btn.style.color = "#88ccff";
+                }, 2000);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand("copy");
+                showCopySuccess();
+            } catch (e) {
+                alert("Не удалось скопировать номер");
+            }
+            document.body.removeChild(ta);
+        }
+
+        function createSignedToken(game, snakes) {
+            const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            const timestamp = Date.now();
+            const data = { g: game, s: snakes, t: timestamp, n: nonce };
+            const sig = btoa(unescape(encodeURIComponent(data.g + '|' + data.s + '|' + data.t + '|' + data.n + '|AntonKuznetsovSnakeProject2026')));
+            data.sig = sig;
+            return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        }
+
+        window.goToLeaderboard = function() {
+            const token = createSignedToken(GAME_NAME_FOR_BOARD, REWARD_SNAKES_ON_WIN);
+            const targetUrl = MAIN_LEADERBOARD_URL + "?reward=" + token;
+            const newWindow = window.open(targetUrl, '_blank');
+            if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') { window.location.href = targetUrl; }
+        };
+
+        function startConfetti() {
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            const colors = ['#66ddff', '#3399ff', '#ffffff', '#88ffaa', '#ffdd88', '#44ccff'];
+            for (let i = 0; i < 120; i++) {
+                const conf = document.createElement('div'); conf.className = 'confetti';
+                conf.style.left = Math.random() * 100 + 'vw';
+                conf.style.width = (Math.random() * 10 + 5) + 'px'; conf.style.height = (Math.random() * 10 + 5) + 'px';
+                conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                conf.style.transition = `top ${Math.random() * 2 + 2}s linear, transform ${Math.random() * 2 + 2}s linear, opacity 2s`;
+                document.body.appendChild(conf);
+                setTimeout(() => {
+                    conf.style.top = '110vh';
+                    conf.style.transform = `rotate(${Math.random() * 720}deg) translateX(${(Math.random() - 0.5) * 200}px)`;
+                    conf.style.opacity = '0';
+                }, 50);
+                setTimeout(() => conf.remove(), 4500);
+            }
+        }
+
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) { try { audioCtx = new(window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function playTone(f, d, type = 'sine', vol = 0.3) {
+            if (!audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = type; osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + d);
+                osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + d);
+            } catch (e) {}
+        }
+        function playChargeTick(step) { initAudio(); if (!audioCtx) return; playTone(300 + step * 150, 0.08, 'square', 0.1); }
+        function playDashSound(power) { initAudio(); if (!audioCtx) return; playTone(200 + power * 80, 0.15, 'sawtooth', 0.2); setTimeout(() => playTone(150, 0.1, 'sawtooth', 0.15), 60); }
+        function playBreakSound(power) { initAudio(); if (!audioCtx) return; playTone(400 + power * 100, 0.1, 'triangle', 0.25); setTimeout(() => playTone(250 + power * 60, 0.12, 'triangle', 0.2), 70); }
+        function playBounceSound() { initAudio(); if (!audioCtx) return; playTone(120, 0.2, 'sawtooth', 0.25); }
+        function playWoodCrash() {
+            initAudio(); if (!audioCtx) return;
+            playTone(90, 0.28, 'square', 0.28);
+            setTimeout(() => playTone(160, 0.18, 'sawtooth', 0.22), 30);
+            setTimeout(() => playTone(70, 0.22, 'triangle', 0.18), 90);
+        }
+        function playParcelBumpSound() {
+            initAudio(); if (!audioCtx) return;
+            playTone(180, 0.1, 'sine', 0.2);
+            setTimeout(() => playTone(120, 0.08, 'sine', 0.15), 30);
+        }
+        function playWinSound() { initAudio(); if (!audioCtx) return; [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => playTone(f, 0.15, 'sine', 0.3), i * 100)); }
+
+        document.addEventListener('click', initAudio, { once: true });
+        document.addEventListener('keydown', initAudio, { once: true });
+
+        // ============================================================
+        // ОПРЕДЕЛЕНИЕ ПРОИЗВОДИТЕЛЬНОСТИ УСТРОЙСТВА
+        // ============================================================
+        const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        const CORES = navigator.hardwareConcurrency || 4;
+        const MEM_GB = (typeof navigator.deviceMemory === 'number') ? navigator.deviceMemory : null;
+
+        const IS_LOW_END = IS_MOBILE && (CORES <= 4 || (MEM_GB !== null && MEM_GB <= 2));
+        const PERF = {
+            shadowMapSize: IS_LOW_END ? 1024 : 2048,
+            particlePool: IS_LOW_END ? 250 : 600,
+            pixelRatio: IS_LOW_END ? 1 : Math.min(window.devicePixelRatio, 1.5),
+            fpsLimit: IS_LOW_END ? 45 : 60
+        };
+        console.log('Perf profile:', { IS_MOBILE, IS_LOW_END, CORES, MEM_GB, PERF });
+
+        let score = 0; const SCORE_TARGET = 15; let isGameActive = false; let animationId = null;
+        let timerInterval = null; let gameTimeLeft = 180; const MAX_TIME = 180;
+        let timerStartReal = 0;
+        let timerPenaltySec = 0;
+        let gameOver = false;
+        let forwardHeld = false, backwardHeld = false, keyUpHeld = false, keyDownHeld = false;
+
+        let charging = false, chargePower = 0, lastChargeStep = 0;
+        let dashing = false, dashTime = 0, dashDuration = 0, dashSpeed = 0, dashPower = 0;
+        let cooldown = 0;
+        const MAX_CHARGE = 3;
+
+        const PLAY_HALF_X = 20;
+        const PLAY_HALF_Z = 12;
+        const BELT_HALF_LENGTH = 15;
+        const BELT_SPEED = 2.6;
+        const SPAWN_INTERVAL = 2.0;
+        const BELT_TOP_Y = 0.65;
+
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+        const packages = [];
+        let spawnTimer = 1.0;
+
+        const _desiredCamPos = new THREE.Vector3();
+        const _cameraOffset = new THREE.Vector3(0, 17, 13);
+
+        function makeGradientTexture(stops) {
+            const c = document.createElement('canvas');
+            c.width = 8; c.height = 256;
+            const ctx = c.getContext('2d');
+            const g = ctx.createLinearGradient(0, 0, 0, 256);
+            for (const s of stops) g.addColorStop(s[0], s[1]);
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, 8, 256);
+            const t = new THREE.CanvasTexture(c);
+            t.magFilter = THREE.LinearFilter;
+            t.minFilter = THREE.LinearFilter;
+            t.generateMipmaps = false;
+            return t;
+        }
+
+        function makeFloorTexture() {
+            const S = 512;
+            const c = document.createElement('canvas'); c.width = c.height = S;
+            const ctx = c.getContext('2d');
+            const half = S / 2;
+            ctx.fillStyle = '#b8c4d2'; ctx.fillRect(0, 0, S, S);
+            ctx.fillStyle = '#a9b6c6';
+            ctx.fillRect(0, 0, half, half);
+            ctx.fillRect(half, half, half, half);
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 5;
+            ctx.strokeRect(2, 2, S - 4, S - 4);
+            ctx.beginPath();
+            ctx.moveTo(half, 0); ctx.lineTo(half, S);
+            ctx.moveTo(0, half); ctx.lineTo(S, half);
+            ctx.stroke();
+            for (let i = 0; i < 500; i++) {
+                ctx.fillStyle = `rgba(110,128,150,${Math.random() * 0.10})`;
+                ctx.fillRect(Math.random() * S, Math.random() * S, 3, 3);
+            }
+            const t = new THREE.CanvasTexture(c);
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+            t.repeat.set(12, 8);
+            t.anisotropy = 4;
+            return t;
+        }
+
+        function makeCrateTexture() {
+            const S = 256;
+            const c = document.createElement('canvas'); c.width = c.height = S;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#c08b4e'; ctx.fillRect(0, 0, S, S);
+            for (let i = 0; i < 4; i++) {
+                ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.06)';
+                ctx.fillRect(0, i * S / 4, S, S / 4);
+            }
+            for (let i = 0; i < 70; i++) {
+                ctx.strokeStyle = `rgba(120,78,38,${0.05 + Math.random() * 0.09})`;
+                ctx.lineWidth = 1 + Math.random() * 2;
+                const y = Math.random() * S;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.bezierCurveTo(S * 0.3, y + 10, S * 0.6, y - 10, S, y);
+                ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(95,58,22,0.6)'; ctx.lineWidth = 7;
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath(); ctx.moveTo(0, i * S / 4); ctx.lineTo(S, i * S / 4); ctx.stroke();
+            }
+            ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 26;
+            ctx.strokeRect(0, 0, S, S);
+            ctx.strokeStyle = 'rgba(255,225,180,0.35)'; ctx.lineWidth = 4;
+            ctx.strokeRect(14, 14, S - 28, S - 28);
+            const t = new THREE.CanvasTexture(c);
+            t.anisotropy = 4;
+            return t;
+        }
+
+        const scene = new THREE.Scene();
+        scene.background = makeGradientTexture([
+            [0.00, '#0a1428'], [0.42, '#1e3a5c'], [0.72, '#3a5f85'], [1.00, '#5a7fa0']
+        ]);
+        scene.fog = new THREE.Fog(0x3a5f85, 55, 140);
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
+        camera.position.set(0, 22, 18);
+
+        let renderer;
+        try {
+            renderer = new THREE.WebGLRenderer({
+                antialias: !IS_LOW_END,
+                alpha: true,
+                powerPreference: 'high-performance'
+            });
+        } catch (e) {
+            document.getElementById('webgl-error').style.display = 'block';
+            console.error('Не удалось создать WebGL контекст:', e);
+            throw e;
+        }
+
+        if (!renderer.getContext()) {
+            document.getElementById('webgl-error').style.display = 'block';
+            console.error('WebGL контекст не создан');
+        }
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.bias = 0.0005;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.85;
+        renderer.setPixelRatio(PERF.pixelRatio);
+        renderer.domElement.style.position = 'fixed';
+        renderer.domElement.style.top = '0';
+        renderer.domElement.style.left = '0';
+        renderer.domElement.style.zIndex = '1';
+        renderer.domElement.style.touchAction = 'none';
+        document.body.appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        renderer.domElement.addEventListener('dragstart', (e) => e.preventDefault());
+        renderer.domElement.style.display = 'none';
+
+        renderer.domElement.addEventListener('webglcontextlost', function(event) {
+            event.preventDefault();
+            console.error('WebGL контекст потерян');
+            alert('Ошибка графики. Пожалуйста, перезагрузите страницу.');
+        });
+
+        renderer.domElement.addEventListener('webglcontextrestored', function() {
+            console.log('WebGL контекст восстановлен');
+            location.reload();
+        });
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI / 2.05;
+        controls.minPolarAngle = 0.1; controls.enableKeys = false; controls.enableZoom = true;
+        controls.enableRotate = true; controls.enablePan = false; controls.minDistance = 5;
+        controls.maxDistance = 80; controls.zoomSpeed = 1.5; controls.rotateSpeed = 0.8;
+
+        const hemiLight = new THREE.HemisphereLight(0xbfd4ea, 0x3a4550, 0.55); scene.add(hemiLight);
+        const ambient = new THREE.AmbientLight(0x8090a5, 0.28); scene.add(ambient);
+
+        const mainLight = new THREE.DirectionalLight(0xffe8d0, 0.95);
+        mainLight.position.set(18, 42, 12);
+        mainLight.castShadow = !IS_LOW_END;
+        mainLight.shadow.mapSize.width = PERF.shadowMapSize;
+        mainLight.shadow.mapSize.height = PERF.shadowMapSize;
+        mainLight.shadow.camera.near = 0.5; mainLight.shadow.camera.far = 140;
+        mainLight.shadow.camera.left = -34; mainLight.shadow.camera.right = 34;
+        mainLight.shadow.camera.top = 34; mainLight.shadow.camera.bottom = -34;
+        mainLight.shadow.bias = -0.001;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0x7a96bd, 0.32); fillLight.position.set(-22, 16, -18); scene.add(fillLight);
+
+        const rimLight1 = new THREE.PointLight(0x4488cc, 0.7, 45, 2); rimLight1.position.set(-PLAY_HALF_X, 6, -PLAY_HALF_Z); scene.add(rimLight1);
+        const rimLight2 = new THREE.PointLight(0xcc7733, 0.55, 45, 2); rimLight2.position.set(PLAY_HALF_X, 6, PLAY_HALF_Z); scene.add(rimLight2);
+
+        const floorTex = makeFloorTexture();
+        const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85, metalness: 0.05 });
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(PLAY_HALF_X * 2 + 10, PLAY_HALF_Z * 2 + 10), floorMat);
+        floor.rotation.x = -Math.PI / 2; floor.position.y = 0; floor.receiveShadow = !IS_LOW_END; scene.add(floor);
+
+        const borderMat = new THREE.MeshStandardMaterial({ color: 0xcc9922, emissive: 0x4a3300, emissiveIntensity: 0.35, roughness: 0.5 });
+        const mkBorder = (w, d, x, z) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), borderMat);
+            m.position.set(x, 0.04, z); m.receiveShadow = false; scene.add(m);
+        };
+        mkBorder(PLAY_HALF_X * 2, 0.3, 0, PLAY_HALF_Z);
+        mkBorder(PLAY_HALF_X * 2, 0.3, 0, -PLAY_HALF_Z);
+        mkBorder(0.3, PLAY_HALF_Z * 2, -PLAY_HALF_X, 0);
+        mkBorder(0.3, PLAY_HALF_Z * 2, PLAY_HALF_X, 0);
+
+        const WALL_GAP = 1.4, WALL_T = 0.8, WALL_H = 1.15;
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x2e3a4f, roughness: 0.6, metalness: 0.35 });
+        const wallGlowMat = new THREE.MeshBasicMaterial({ color: 0x5599bb });
+
+        function buildWall(x, z, w, d) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
+            wall.position.set(x, WALL_H / 2, z);
+            wall.castShadow = !IS_LOW_END; wall.receiveShadow = !IS_LOW_END;
+            scene.add(wall);
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 0.985, 0.09, d * 0.985), wallGlowMat);
+            strip.position.set(x, WALL_H + 0.03, z);
+            scene.add(strip);
+        }
+        const WX = PLAY_HALF_X + WALL_GAP + WALL_T / 2;
+        const WZ = PLAY_HALF_Z + WALL_GAP + WALL_T / 2;
+        const WALL_LEN_X = (PLAY_HALF_X + WALL_GAP + WALL_T) * 2;
+        const WALL_LEN_Z = (PLAY_HALF_Z + WALL_GAP + WALL_T) * 2;
+        buildWall(0, WZ, WALL_LEN_X, WALL_T);
+        buildWall(0, -WZ, WALL_LEN_X, WALL_T);
+        buildWall(-WX, 0, WALL_T, WALL_LEN_Z);
+        buildWall(WX, 0, WALL_T, WALL_LEN_Z);
+
+        const beltMat = new THREE.MeshStandardMaterial({ color: 0x2a2a35, roughness: 0.7, metalness: 0.3 });
+        const belt = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF_LENGTH * 2, 0.3, 3), beltMat);
+        belt.position.set(0, 0.5, 0); belt.receiveShadow = !IS_LOW_END; belt.castShadow = !IS_LOW_END; scene.add(belt);
+
+        const stripeMat = new THREE.MeshStandardMaterial({ color: 0x4a4a5a, roughness: 0.8 });
+        const beltStripes = [];
+        for (let i = 0; i < 12; i++) {
+            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.04, 3), stripeMat);
+            stripe.position.set(-BELT_HALF_LENGTH + (i / 12) * BELT_HALF_LENGTH * 2, 0.66, 0);
+            scene.add(stripe);
+            beltStripes.push(stripe);
+        }
+
+        const rollerMat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.6 });
+        for (let sx of [-1, 1]) {
+            const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3, 14), rollerMat);
+            roller.rotation.x = Math.PI / 2;
+            roller.position.set(sx * BELT_HALF_LENGTH, 0.5, 0);
+            roller.castShadow = !IS_LOW_END; scene.add(roller);
+        }
+
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x444450, roughness: 0.7 });
+        for (let lx = -BELT_HALF_LENGTH + 3; lx <= BELT_HALF_LENGTH - 3; lx += 6) {
+            for (let sz of [-1, 1]) {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.35, 0.2), legMat);
+                leg.position.set(lx, 0.175, sz * 1.2);
+                scene.add(leg);
+            }
+        }
+
+        const mailboxMat = new THREE.MeshStandardMaterial({ color: 0x1a3a8a, roughness: 0.5, metalness: 0.3, emissive: 0x0a1840, emissiveIntensity: 0.2 });
+        for (let sx of [-1, 1]) {
+            const mb = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.5, 14), mailboxMat);
+            mb.position.set(sx * (PLAY_HALF_X + 3.6), 0.75, 0);
+            mb.castShadow = !IS_LOW_END; scene.add(mb);
+            const top = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mailboxMat);
+            top.position.set(sx * (PLAY_HALF_X + 3.6), 1.5, 0);
+            top.castShadow = !IS_LOW_END; scene.add(top);
+        }
+
+        const crates = [];
+        const SNAKE_RADIUS = 0.95;
+        const SEG_COLLIDE_RADIUS = 0.55;
+        const PARCEL_COLLISION_RADIUS = 0.65;
+
+        const crateTex = makeCrateTexture();
+        const crateMat = new THREE.MeshStandardMaterial({ map: crateTex, roughness: 0.78, metalness: 0.04 });
+        const crateEdgeMat = new THREE.MeshStandardMaterial({ color: 0x6a4520, roughness: 0.72, metalness: 0.08 });
+        const crateBandMat = new THREE.MeshStandardMaterial({ color: 0x4d3015, roughness: 0.6, metalness: 0.25 });
+
+        function buildCrate(x, z, size, baseY) {
+            const g = new THREE.Group();
+            const half = size / 2;
+
+            const box = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMat);
+            box.castShadow = !IS_LOW_END; box.receiveShadow = !IS_LOW_END;
+            g.add(box);
+
+            const postGeo = new THREE.BoxGeometry(size * 0.13, size * 1.03, size * 0.13);
+            for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+                const p = new THREE.Mesh(postGeo, crateEdgeMat);
+                p.position.set(sx * half, 0, sz * half);
+                p.castShadow = !IS_LOW_END;
+                g.add(p);
+            }
+
+            const bandGeo = new THREE.BoxGeometry(size * 1.015, size * 0.085, size * 1.015);
+            for (const sy of [-0.35, 0.35]) {
+                const b = new THREE.Mesh(bandGeo, crateBandMat);
+                b.position.y = sy * size;
+                b.castShadow = !IS_LOW_END;
+                g.add(b);
+            }
+
+            const y = (baseY !== undefined) ? baseY + half : half;
+            g.position.set(x, y, z);
+            scene.add(g);
+
+            const crate = {
+                x, z, half: half + 0.08, size, group: g, baseY: y, shake: 0, _lastHitTime: 0
+            };
+            crates.push(crate);
+            return crate;
+        }
+
+        const CRATE_LAYOUT = [
+            { x: -14.5, z: -8.0, size: 2.2 }, { x: -7.2,  z: -8.0, size: 2.0 },
+            { x:  7.2,  z: -8.0, size: 2.0 }, { x:  14.5, z: -8.0, size: 2.2 },
+            { x: -14.5, z:  8.0, size: 2.0 }, { x: -7.2,  z:  8.0, size: 2.2 },
+            { x:  7.2,  z:  8.0, size: 2.2 }, { x:  14.5, z:  8.0, size: 2.0 },
+            { x:   0,   z: -10.6, size: 2.4 }, { x:   0,   z:  10.6, size: 2.4 }
+        ];
+        CRATE_LAYOUT.forEach(c => buildCrate(c.x, c.z, c.size));
+
+        const BELT_EDGE_CRATE_LAYOUT = [
+            { x: -13.0, z:  3.0, size: 1.5 }, { x: -8.5,  z:  3.0, size: 1.6 },
+            { x: -3.5,  z:  3.0, size: 1.5 }, { x:  2.5,  z:  3.0, size: 1.6 },
+            { x:  7.5,  z:  3.0, size: 1.5 }, { x: 12.5,  z:  3.0, size: 1.6 },
+            { x: -13.0, z: -3.0, size: 1.6 }, { x: -8.5,  z: -3.0, size: 1.5 },
+            { x: -3.5,  z: -3.0, size: 1.6 }, { x:  2.5,  z: -3.0, size: 1.5 },
+            { x:  7.5,  z: -3.0, size: 1.6 }, { x: 12.5,  z: -3.0, size: 1.5 }
+        ];
+        BELT_EDGE_CRATE_LAYOUT.forEach(c => buildCrate(c.x, c.z, c.size));
+
+        function collideCrates(pos, radius) {
+            let hit = null;
+            for (let pass = 0; pass < 4; pass++) {
+                let anyHit = false;
+                for (const c of crates) {
+                    const dx = pos.x - c.x;
+                    const dz = pos.z - c.z;
+                    const reach = c.half + radius;
+                    if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+
+                    const cx = clamp(dx, -c.half, c.half);
+                    const cz = clamp(dz, -c.half, c.half);
+                    const ox = dx - cx;
+                    const oz = dz - cz;
+                    const d2 = ox * ox + oz * oz;
+
+                    if (d2 >= radius * radius) continue;
+
+                    if (d2 > 1e-8) {
+                        const d = Math.sqrt(d2);
+                        const push = radius - d + 0.03;
+                        pos.x += (ox / d) * push;
+                        pos.z += (oz / d) * push;
+                    } else {
+                        const penX = c.half + radius - Math.abs(dx);
+                        const penZ = c.half + radius - Math.abs(dz);
+                        if (penX < penZ) pos.x += (Math.sign(dx) || 1) * penX;
+                        else             pos.z += (Math.sign(dz) || 1) * penZ;
+                    }
+                    hit = { crate: c };
+                    anyHit = true;
+                }
+                if (!anyHit) break;
+            }
+            return hit;
+        }
+
+        function collideWithPackages(pos, radius) {
+            let hit = null;
+            for (let pass = 0; pass < 3; pass++) {
+                let anyHit = false;
+                for (const p of packages) {
+                    if (p.state !== 'onBelt') continue;
+                    const dx = pos.x - p.x;
+                    const dz = pos.z - p.z;
+                    const reach = PARCEL_COLLISION_RADIUS + radius;
+                    if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+                    const d2 = dx * dx + dz * dz;
+                    if (d2 >= reach * reach) continue;
+
+                    if (d2 > 1e-8) {
+                        const d = Math.sqrt(d2);
+                        const push = reach - d + 0.05;
+                        pos.x += (dx / d) * push;
+                        pos.z += (dz / d) * push;
+                    } else {
+                        pos.x += radius * 0.5;
+                    }
+                    hit = p;
+                    anyHit = true;
+                }
+                if (!anyHit) break;
+            }
+            return hit;
+        }
+
+        const parcelGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+        const tapeGeo = new THREE.BoxGeometry(1.05, 0.10, 0.24);
+        const tapeMatBad = new THREE.MeshStandardMaterial({ color: 0xffe0e0, emissive: 0x441818, emissiveIntensity: 0.3, roughness: 0.6 });
+        const tapeMatGood = new THREE.MeshStandardMaterial({ color: 0xe4ffec, emissive: 0x0e3818, emissiveIntensity: 0.3, roughness: 0.6 });
+
+        function spawnPackage() {
+            const bad = Math.random() < 0.55;
+            const color = bad ? 0xdd3333 : 0x33bb55;
+            const mat = new THREE.MeshStandardMaterial({
+                color, roughness: 0.5, metalness: 0.1, emissive: color, emissiveIntensity: 0.12
+            });
+            const mesh = new THREE.Mesh(parcelGeo, mat);
+            mesh.position.set(-BELT_HALF_LENGTH, 1.15, 0);
+            mesh.castShadow = !IS_LOW_END; mesh.receiveShadow = !IS_LOW_END;
+
+            const tape = new THREE.Mesh(tapeGeo, bad ? tapeMatBad : tapeMatGood);
+            tape.position.y = 0.52; tape.castShadow = false;
+            mesh.add(tape);
+
+            scene.add(mesh);
+            packages.push({
+                x: -BELT_HALF_LENGTH, y: 1.15, z: 0, bad, mesh, state: 'onBelt',
+                vel: new THREE.Vector3(), spin: new THREE.Vector3(), _lastBumpTime: 0
+            });
+        }
+
+        function removePackage(i, withBurst) {
+            const p = packages[i];
+            if (withBurst) {
+                spawnBurst(new THREE.Vector3(p.x, 1.3, p.z), p.bad ? 0xff8855 : 0x66cc88, 50);
+                playBreakSound(0.5);
+            }
+            scene.remove(p.mesh);
+            if (p.mesh.material) p.mesh.material.dispose();
+            packages.splice(i, 1);
+        }
+
+        function knockOff(i, dir) {
+            const p = packages[i];
+            p.state = 'knocked';
+            const side = Math.random() < 0.5 ? 1 : -1;
+            p.vel.set(dir.x * 5, 7, side * (3.5 + Math.random() * 2.5));
+            p.spin.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+        }
+
+        function updatePackages(delta) {
+            spawnTimer -= delta;
+            if (spawnTimer <= 0) { spawnPackage(); spawnTimer = SPAWN_INTERVAL; }
+            for (let i = packages.length - 1; i >= 0; i--) {
+                const p = packages[i];
+                if (p.state === 'onBelt') {
+                    p.x += BELT_SPEED * delta;
+                    p.mesh.position.x = p.x;
+                    p.mesh.rotation.z = Math.sin(p.x * 2) * 0.02;
+                    if (p.x > BELT_HALF_LENGTH + 0.5) removePackage(i);
+                } else if (p.state === 'knocked') {
+                    p.vel.y -= 24 * delta;
+                    p.x += p.vel.x * delta; p.y += p.vel.y * delta; p.z += p.vel.z * delta;
+                    p.mesh.position.set(p.x, p.y, p.z);
+                    p.mesh.rotation.x += p.spin.x * delta;
+                    p.mesh.rotation.y += p.spin.y * delta;
+                    p.mesh.rotation.z += p.spin.z * delta;
+                    if (p.y < -3 || Math.abs(p.x) > 45 || Math.abs(p.z) > 30) removePackage(i);
+                }
+            }
+        }
+
+        function updateBeltStripes(delta) {
+            for (let s of beltStripes) {
+                s.position.x += BELT_SPEED * delta;
+                if (s.position.x > BELT_HALF_LENGTH) s.position.x -= BELT_HALF_LENGTH * 2;
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+            const bar = document.getElementById('scoreProgress');
+            if (bar) bar.style.width = Math.min(100, (score / SCORE_TARGET) * 100) + '%';
+        }
+        function flashScoreGood() {
+            const el = document.getElementById('hud-score-box');
+            el.style.color = '#66ff88';
+            setTimeout(() => { el.style.color = ''; }, 400);
+        }
+        function penalizeTime(sec) {
+            timerPenaltySec += sec;
+            gameTimeLeft = Math.max(0, gameTimeLeft - sec);
+            updateTimerDisplay();
+            flashTimerBad();
+            if (gameTimeLeft <= 0) { finishGame(false); }
+        }
+        function flashTimerBad() {
+            const el = document.getElementById('timerDisplay');
+            el.style.color = '#ff4444';
+            setTimeout(() => { el.style.color = ''; }, 500);
+        }
+
+        function popText(text, color, worldPos) {
+            let sx = window.innerWidth / 2, sy = window.innerHeight / 2;
+            if (worldPos) {
+                const v = worldPos.clone().project(camera);
+                sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+                sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
+            }
+            const el = document.createElement('div');
+            el.className = 'pop-text';
+            el.textContent = text;
+            el.style.color = color;
+            el.style.left = sx + 'px';
+            el.style.top = sy + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 900);
+        }
+
+        const particlePool = [];
+        const particleGeo = new THREE.SphereGeometry(0.18, IS_LOW_END ? 6 : 8, IS_LOW_END ? 6 : 8);
+        for (let i = 0; i < PERF.particlePool; i++) {
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+            const mesh = new THREE.Mesh(particleGeo, mat); mesh.visible = false; scene.add(mesh);
+            particlePool.push({ mesh, velocity: new THREE.Vector3(), life: 0, isActive: false });
+        }
+        function spawnBurst(pos, colorHex, count = 20) {
+            let spawned = 0;
+            const actualCount = IS_LOW_END ? Math.floor(count / 2) : count;
+            for (let p of particlePool) {
+                if (!p.isActive && spawned < actualCount) {
+                    p.isActive = true; p.life = 1.0; p.mesh.visible = true;
+                    p.mesh.position.copy(pos);
+                    p.mesh.material.color.setHex(colorHex);
+                    const sp = 5 + Math.random() * 11;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.random() * Math.PI;
+                    p.velocity.set(Math.cos(theta) * Math.sin(phi) * sp, 3 + Math.random() * 9, Math.sin(theta) * Math.sin(phi) * sp);
+                    spawned++;
+                }
+                if (spawned >= actualCount) break;
+            }
+        }
+        function updateParticles(delta) {
+            for (let p of particlePool) {
+                if (!p.isActive) continue;
+                p.life -= delta * 1.3;
+                if (p.life <= 0) { p.isActive = false; p.mesh.visible = false; continue; }
+                p.velocity.y -= 9.8 * delta * 0.7;
+                p.mesh.position.addScaledVector(p.velocity, delta);
+                const s = p.life * 1.3 + 0.25;
+                p.mesh.scale.set(s, s, s);
+                p.mesh.material.opacity = p.life;
+            }
+        }
+
+        let shakeTime = 0, shakeMag = 0;
+        function addShake(mag, time) {
+            shakeMag = Math.max(shakeMag, mag);
+            shakeTime = Math.max(shakeTime, time);
+        }
+
+        const snakeGroup = new THREE.Group(); scene.add(snakeGroup);
+        const SEGMENTS = 38; const BASE_R = 0.48, SPACING = 0.55, FIXED_SCALE = 1.0;
+        const snakeBody = [];
+        const bodyMatGlass = new THREE.MeshStandardMaterial({ color: 0xc82020, roughness: 0.2, metalness: 0.3, emissive: 0x660000, emissiveIntensity: 0.45 });
+        const baseRadii = [];
+        for (let i = 0; i < SEGMENTS; i++) baseRadii.push(BASE_R * (1 - i / (SEGMENTS - 1) * 0.7));
+        for (let i = 0; i < SEGMENTS; i++) {
+            const geo = new THREE.SphereGeometry(baseRadii[i], 20, 20);
+            const mesh = new THREE.Mesh(geo, bodyMatGlass.clone());
+            mesh.castShadow = !IS_LOW_END; mesh.receiveShadow = !IS_LOW_END;
+            snakeGroup.add(mesh); snakeBody.push(mesh);
+            mesh.scale.set(FIXED_SCALE, FIXED_SCALE, FIXED_SCALE);
+        }
+
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xe03030, roughness: 0.2, metalness: 0.3, emissive: 0x881818, emissiveIntensity: 0.55 });
+        const headGeo = new THREE.SphereGeometry(0.88, 36, 36); headGeo.scale(1, 0.85, 1.45);
+        const head = new THREE.Mesh(headGeo, headMat); head.castShadow = !IS_LOW_END; snakeGroup.add(head);
+        head.scale.set(FIXED_SCALE, FIXED_SCALE * 0.85, FIXED_SCALE * 1.45);
+        const headLight = new THREE.PointLight(0xff6644, 1.8, 25); headLight.position.set(0, 1.2, 2.2); head.add(headLight);
+
+        function createEye(ox, oy, oz) {
+            const g = new THREE.Group();
+            const white = new THREE.Mesh(new THREE.SphereGeometry(0.24, 28, 28), new THREE.MeshStandardMaterial({ color: 0xf8f8ff, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.9 }));
+            white.scale.set(1, 1.1, 0.9); g.add(white);
+            const iris = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 24), new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xcc8800, emissiveIntensity: 0.85, roughness: 0.2, metalness: 0.1 }));
+            iris.position.z = 0.17; iris.scale.set(1, 1.2, 0.5); g.add(iris);
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.075, 18, 18), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            pupil.scale.set(0.5, 1.6, 0.4); pupil.position.z = 0.24; g.add(pupil);
+            g.position.set(ox, oy, oz); return g;
+        }
+        head.add(createEye(-0.42, 0.35, 0.78)); head.add(createEye(0.42, 0.35, 0.78));
+
+        const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.045, 14, 24, Math.PI), new THREE.MeshStandardMaterial({ color: 0x5a0808, emissive: 0x220000, emissiveIntensity: 0.35, roughness: 0.3 }));
+        mouth.position.set(0, -0.28, 0.98); mouth.rotation.z = Math.PI; head.add(mouth);
+
+        const tongueGroup = new THREE.Group();
+        const tongueBase = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0xff2244, emissive: 0x660010, emissiveIntensity: 0.45, roughness: 0.2, metalness: 0.3 }));
+        tongueBase.rotation.x = Math.PI / 2; tongueBase.position.z = 0.2; tongueGroup.add(tongueBase);
+        tongueGroup.position.set(0, -0.28, 1.08); head.add(tongueGroup);
+
+        const HEAD_RADIUS = 0.88, HEAD_SCALE_Z = 1.45;
+        const BACK_OFFSET = HEAD_RADIUS * HEAD_SCALE_Z + 0.05;
+        const segPos = [];
+        for (let i = 0; i < SEGMENTS; i++) segPos.push(new THREE.Vector3(-i * SPACING, 0, 0));
+
+        const headPosition = new THREE.Vector3(0, 0, 5);
+        let dirAngle = 0, targetAngle = 0;
+        const moveDir = new THREE.Vector3(1, 0, 0);
+        const BASE_SPEED = 4.5;
+        const MAX_PATH = 600;
+        const pathHist = [];
+        for (let i = 0; i < MAX_PATH; i++) pathHist.push(new THREE.Vector3(0, 0, 5));
+        let pathWrite = 0, pathValid = 0;
+        let speedMult = 1.0;
+        let eatAnim = 0;
+
+        function startCharge() {
+            if (!isGameActive || gameOver) return;
+            if (dashing || cooldown > 0) return;
+            charging = true; chargePower = 0; lastChargeStep = 0;
+        }
+        function releaseCharge() {
+            if (!charging) return;
+            charging = false;
+            if (chargePower >= 0.3) {
+                dashing = true; dashTime = 0; dashPower = chargePower;
+                dashSpeed = 10 + chargePower * 7; dashDuration = 0.2 + chargePower * 0.12;
+                playDashSound(chargePower);
+                addShake(0.35 + chargePower * 0.15, 0.12);
+            } else {
+                chargePower = 0;
+            }
+        }
+        function endDash() { dashing = false; dashPower = 0; chargePower = 0; }
+
+        document.addEventListener('keydown', (e) => {
+            if (!isGameActive || gameOver) return;
+            if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault(); if (!e.repeat) startCharge(); return;
+            }
+            if (e.key === 'ArrowUp') { keyUpHeld = true; e.preventDefault(); return; }
+            if (e.key === 'ArrowDown') { keyDownHeld = true; e.preventDefault(); return; }
+            if (e.repeat) return;
+            if (e.key === 'ArrowLeft') { targetAngle = dirAngle + Math.PI / 2; e.preventDefault(); return; }
+            if (e.key === 'ArrowRight') { targetAngle = dirAngle - Math.PI / 2; e.preventDefault(); return; }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') releaseCharge();
+            if (e.key === 'ArrowUp') keyUpHeld = false;
+            if (e.key === 'ArrowDown') keyDownHeld = false;
+        });
+        window.addEventListener('blur', () => {
+            forwardHeld = false; backwardHeld = false; keyUpHeld = false; keyDownHeld = false;
+            if (charging) { charging = false; chargePower = 0; }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isGameActive) {
+                forwardHeld = false; backwardHeld = false; keyUpHeld = false; keyDownHeld = false;
+                if (charging) { charging = false; chargePower = 0; }
+            }
+        });
+
+        const HAS_POINTER = ('PointerEvent' in window);
+
+        function setupTouchControls() {
+            const btns = document.querySelectorAll('.touch-btn');
+            btns.forEach(btn => {
+                const action = btn.dataset.action;
+                if (!action) return;
+
+                const start = (e) => {
+                    e.preventDefault();
+                    if (!isGameActive || gameOver) return;
+                    btn.classList.add('held');
+                    if (HAS_POINTER && e.pointerId !== undefined && btn.setPointerCapture) {
+                        try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+                    }
+                    if (action === 'left') targetAngle = dirAngle + Math.PI / 2;
+                    else if (action === 'right') targetAngle = dirAngle - Math.PI / 2;
+                    else if (action === 'strike') startCharge();
+                    else if (action === 'forward') forwardHeld = true;
+                    else if (action === 'backward') backwardHeld = true;
+                };
+                const end = (e) => {
+                    if (e && e.preventDefault) e.preventDefault();
+                    btn.classList.remove('held');
+                    if (action === 'strike') releaseCharge();
+                    if (action === 'forward') forwardHeld = false;
+                    if (action === 'backward') backwardHeld = false;
+                };
+
+                if (HAS_POINTER) {
+                    btn.addEventListener('pointerdown', start, { passive: false });
+                    btn.addEventListener('pointerup', end, { passive: false });
+                    btn.addEventListener('pointercancel', end, { passive: false });
+                } else {
+                    btn.addEventListener('touchstart', start, { passive: false });
+                    btn.addEventListener('touchend', end, { passive: false });
+                    btn.addEventListener('touchcancel', end, { passive: false });
+                    btn.addEventListener('mousedown', start, { passive: false });
+                    btn.addEventListener('mouseup', end, { passive: false });
+                    btn.addEventListener('mouseleave', end, { passive: false });
+                }
+                btn.addEventListener('contextmenu', (e) => e.preventDefault());
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupTouchControls);
+        } else {
+            setupTouchControls();
+        }
+
+        function updateChargeUI() {
+            const tr = translations[currentLang];
+            const fill = document.getElementById('charge-bar-fill');
+            const label = document.getElementById('charge-label');
+            if (charging) {
+                label.textContent = tr.chargeCharging;
+                const pct = (chargePower / MAX_CHARGE) * 100;
+                fill.style.width = pct + '%';
+                fill.style.background = chargePower >= 3 ? '#ff4444' : (chargePower >= 2 ? '#ff8844' : '#ffdd44');
+            } else if (dashing) {
+                label.textContent = tr.chargeStrike;
+                fill.style.width = '100%'; fill.style.background = '#ff4444';
+            } else if (cooldown > 0) {
+                label.textContent = tr.chargeCooldown;
+                fill.style.width = '0%';
+            } else {
+                label.textContent = tr.chargeReady;
+                fill.style.width = '0%';
+            }
+        }
+
+        function updateTimerDisplay() {
+            const m = Math.floor(gameTimeLeft / 60), s = Math.floor(gameTimeLeft % 60);
+            const d = document.getElementById('timerDisplay');
+            d.textContent = `⏱ ${m}:${s.toString().padStart(2, '0')}`;
+            d.classList.toggle('warning', gameTimeLeft <= 10);
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerStartReal = performance.now();
+            timerPenaltySec = 0;
+            timerInterval = setInterval(() => {
+                if (!isGameActive || gameOver) return;
+                const elapsedSec = (performance.now() - timerStartReal) / 1000 + timerPenaltySec;
+                const newLeft = Math.max(0, MAX_TIME - elapsedSec);
+                const intLeft = Math.ceil(newLeft);
+                if (intLeft !== Math.floor(gameTimeLeft)) {
+                    gameTimeLeft = newLeft;
+                    updateTimerDisplay();
+                } else {
+                    gameTimeLeft = newLeft;
+                }
+                if (gameTimeLeft <= 0) {
+                    clearInterval(timerInterval); timerInterval = null;
+                    gameTimeLeft = 0; updateTimerDisplay();
+                    finishGame(false);
+                }
+            }, 200);
+        }
+
+        const clock = new THREE.Clock(); let lastFrame = 0;
+        const FPS_LIMIT = PERF.fpsLimit, FRAME_INTERVAL = 1000 / FPS_LIMIT;
+        const cameraTarget = new THREE.Vector3(0, 0, 5);
+
+        function crashIntoCrate(crateHit) {
+            playWoodCrash();
+            addShake(1.7, 0.4);
+            crateHit.crate.shake = 1;
+            spawnBurst(new THREE.Vector3(headPosition.x, 1.0, headPosition.z), 0xd9a45b, 40);
+            spawnBurst(new THREE.Vector3(headPosition.x, 1.0, headPosition.z), 0xfff2d0, 20);
+        }
+
+        function handleDashHits() {
+            for (let i = packages.length - 1; i >= 0; i--) {
+                const p = packages[i];
+                if (p.state !== 'onBelt') continue;
+                if (Math.hypot(headPosition.x - p.x, headPosition.z - p.z) < 1.45) {
+                    if (p.bad) {
+                        score++; updateScore(); flashScoreGood();
+                        spawnBurst(new THREE.Vector3(p.x, 1.2, p.z), 0xff8855, 100);
+                        spawnBurst(new THREE.Vector3(p.x, 1.2, p.z), 0xffdd88, 40);
+                        playBreakSound(1); addShake(1.2, 0.3);
+                        popText('+1', '#66ff88', new THREE.Vector3(p.x, 1.6, p.z));
+                        eatAnim = 1.0; knockOff(i, moveDir);
+                        if (score >= SCORE_TARGET) { playWinSound(); finishGame(true); return; }
+                    } else {
+                        spawnBurst(new THREE.Vector3(p.x, 1.2, p.z), 0x66cc88, 60);
+                        spawnBurst(new THREE.Vector3(p.x, 1.2, p.z), 0xccffdd, 25);
+                        playBounceSound(); popText('-5s', '#ff7766', new THREE.Vector3(p.x, 1.6, p.z));
+                        addShake(1.0, 0.3); knockOff(i, moveDir);
+                        penalizeTime(5); if (gameOver) return;
+                    }
+                }
+            }
+        }
+
+        function moveHeadWithSubsteps(dx, dz, radius) {
+            const dist = Math.hypot(dx, dz);
+            const steps = Math.max(1, Math.ceil(dist / 0.22));
+            const sdx = dx / steps;
+            const sdz = dz / steps;
+            let hit = null;
+
+            for (let s = 0; s < steps; s++) {
+                headPosition.x += sdx;
+                headPosition.z += sdz;
+
+                headPosition.x = clamp(headPosition.x, -PLAY_HALF_X, PLAY_HALF_X);
+                headPosition.z = clamp(headPosition.z, -PLAY_HALF_Z, PLAY_HALF_Z);
+
+                const h = collideCrates(headPosition, radius);
+                if (h) { hit = h; break; }
+            }
+            return hit;
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            if (time - lastFrame < FRAME_INTERVAL) {
+                return;
+            }
+
+            lastFrame = time;
+            const delta = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.elapsedTime;
+
+            if (!isGameActive || gameOver) {
+                controls.update();
+                renderer.render(scene, camera);
+                return;
+            }
+
+            updateParticles(delta);
+            if (cooldown > 0) cooldown -= delta;
+
+            if (charging) {
+                chargePower = Math.min(MAX_CHARGE, chargePower + delta * 2.0);
+                const step = Math.floor(chargePower);
+                if (step > lastChargeStep) { playChargeTick(step); lastChargeStep = step; }
+            }
+            updateChargeUI();
+
+            updateBeltStripes(delta);
+            updatePackages(delta);
+
+            const now = performance.now();
+            for (const c of crates) {
+                if (c.shake > 0) {
+                    c.shake = Math.max(0, c.shake - delta * 2.6);
+                    const s = c.shake;
+                    c.group.position.x = c.x + Math.sin(now * 0.05) * 0.07 * s;
+                    c.group.position.z = c.z + Math.cos(now * 0.062) * 0.07 * s;
+                    c.group.rotation.z = Math.sin(now * 0.045) * 0.06 * s;
+                    const sc = 1 + s * 0.05;
+                    c.group.scale.set(sc, 1 / Math.max(0.6, sc), sc);
+                    if (c.shake === 0) {
+                        c.group.position.set(c.x, c.baseY, c.z);
+                        c.group.rotation.z = 0;
+                        c.group.scale.set(1, 1, 1);
+                    }
+                }
+            }
+
+            if (!dashing) {
+                let angleDiff = targetAngle - dirAngle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                const maxTurn = delta * 12;
+                if (Math.abs(angleDiff) > maxTurn) angleDiff = Math.sign(angleDiff) * maxTurn;
+                dirAngle += angleDiff;
+            }
+            moveDir.x = Math.cos(dirAngle); moveDir.z = Math.sin(dirAngle);
+
+            if (dashing) {
+                dashTime += delta;
+                const dx = moveDir.x * dashSpeed * delta;
+                const dz = moveDir.z * dashSpeed * delta;
+                const startX = headPosition.x;
+                const startZ = headPosition.z;
+                const hitCrate = moveHeadWithSubsteps(dx, dz, SNAKE_RADIUS);
+
+                if (hitCrate) {
+                    const nx = headPosition.x - startX;
+                    const nz = headPosition.z - startZ;
+                    const nl = Math.hypot(nx, nz) || 1;
+                    headPosition.x -= (nx / nl) * 0.15;
+                    headPosition.z -= (nz / nl) * 0.15;
+                    collideCrates(headPosition, SNAKE_RADIUS);
+                    crashIntoCrate(hitCrate);
+                    endDash(); cooldown = 0.55;
+                } else {
+                    const atWallX = headPosition.x <= -PLAY_HALF_X + 0.001 || headPosition.x >= PLAY_HALF_X - 0.001;
+                    const atWallZ = headPosition.z <= -PLAY_HALF_Z + 0.001 || headPosition.z >= PLAY_HALF_Z - 0.001;
+
+                    if (atWallX || atWallZ) {
+                        endDash(); cooldown = 0.45;
+                        playBounceSound(); addShake(0.9, 0.25);
+                        spawnBurst(new THREE.Vector3(headPosition.x, 0.9, headPosition.z), 0xbfe0ff, 30);
+                    } else {
+                        handleDashHits();
+                        if (gameOver) return;
+                        if (dashing && dashTime >= dashDuration) { endDash(); cooldown = 0.4; }
+                    }
+                }
+            } else {
+                const SPEED_ACCEL = 1.6;
+                const forwardActive = forwardHeld || keyUpHeld;
+                const backwardActive = backwardHeld || keyDownHeld;
+                if (forwardActive && !backwardActive) speedMult = Math.min(2.0, speedMult + SPEED_ACCEL * delta);
+                else if (backwardActive && !forwardActive) speedMult = Math.max(0.0, speedMult - SPEED_ACCEL * delta);
+
+                let currentSpeed = BASE_SPEED * speedMult;
+                if (charging) currentSpeed = BASE_SPEED * speedMult * 0.4;
+
+                const dx = moveDir.x * currentSpeed * delta;
+                const dz = moveDir.z * currentSpeed * delta;
+
+                const hitCrate = moveHeadWithSubsteps(dx, dz, SNAKE_RADIUS);
+                const hitParcel = collideWithPackages(headPosition, SNAKE_RADIUS);
+
+                if (hitParcel) {
+                    const pushBack = 0.3;
+                    headPosition.x -= moveDir.x * pushBack;
+                    headPosition.z -= moveDir.z * pushBack;
+                    headPosition.x = clamp(headPosition.x, -PLAY_HALF_X, PLAY_HALF_X);
+                    headPosition.z = clamp(headPosition.z, -PLAY_HALF_Z, PLAY_HALF_Z);
+
+                    if (now - (hitParcel._lastBumpTime || 0) > 250) {
+                        hitParcel._lastBumpTime = now;
+                        playParcelBumpSound(); addShake(0.25, 0.08);
+                        const burstColor = hitParcel.bad ? 0xff6666 : 0x66ff66;
+                        spawnBurst(new THREE.Vector3(hitParcel.x, 1.2, hitParcel.z), burstColor, 15);
+                        headMat.emissiveIntensity = 1.2;
+                        setTimeout(() => { headMat.emissiveIntensity = 0.55; }, 150);
+                    }
+                }
+
+                if (hitCrate) {
+                    if (now - (hitCrate.crate._lastHitTime || 0) > 400) {
+                        hitCrate.crate._lastHitTime = now;
+                        hitCrate.crate.shake = 0.55;
+                        addShake(0.4, 0.15); playBounceSound();
+                    }
+                }
+            }
+
+            if (charging) {
+                headMat.emissiveIntensity = 0.55 + chargePower * 0.35;
+                headLight.intensity = 1.8 + chargePower * 1.4;
+                headLight.color.setHex(0xffaa33);
+            } else if (dashing) {
+                headMat.emissiveIntensity = 1.2;
+                headLight.intensity = 4.5;
+                headLight.color.setHex(0xffdd55);
+            } else {
+                headMat.emissiveIntensity = 0.55;
+                headLight.intensity = 1.8;
+                headLight.color.setHex(0xff6644);
+            }
+
+            segPos[0].x = headPosition.x - moveDir.x * BACK_OFFSET;
+            segPos[0].z = headPosition.z - moveDir.z * BACK_OFFSET;
+            segPos[1].x = segPos[0].x - moveDir.x * SPACING;
+            segPos[1].z = segPos[0].z - moveDir.z * SPACING;
+
+            const lastP = pathHist[pathWrite];
+            if (pathValid === 0 || segPos[0].distanceTo(lastP) > 0.02) {
+                pathWrite = (pathWrite + 1) % MAX_PATH;
+                pathHist[pathWrite].copy(segPos[0]);
+                if (pathValid < MAX_PATH) pathValid++;
+            }
+
+            const cumDist = [0]; let total = 0;
+            for (let j = 1; j < pathValid; j++) {
+                const idxC = (pathWrite - j + MAX_PATH) % MAX_PATH;
+                const idxP = (pathWrite - j + 1 + MAX_PATH) % MAX_PATH;
+                total += pathHist[idxP].distanceTo(pathHist[idxC]);
+                cumDist.push(total);
+            }
+
+            function getPointInto(target, distFromStart) {
+                if (distFromStart <= 0) { target.copy(pathHist[pathWrite]); return target; }
+                const maxDist = cumDist[cumDist.length - 1];
+                if (distFromStart >= maxDist) {
+                    const lastIdx = (pathWrite - cumDist.length + 1 + MAX_PATH) % MAX_PATH;
+                    target.copy(pathHist[lastIdx]); return target;
+                }
+                let idx = 0;
+                while (idx < cumDist.length && cumDist[idx] < distFromStart) idx++;
+                if (idx === 0) { target.copy(pathHist[pathWrite]); return target; }
+                const prevIdx = (pathWrite - idx + 1 + MAX_PATH) % MAX_PATH;
+                const currIdx = (pathWrite - idx + MAX_PATH) % MAX_PATH;
+                const prevDist = cumDist[idx - 1], currDist = cumDist[idx];
+                const t = (distFromStart - prevDist) / (currDist - prevDist);
+                target.lerpVectors(pathHist[prevIdx], pathHist[currIdx], t);
+                return target;
+            }
+            for (let i = 2; i < SEGMENTS; i++) {
+                const d = (i - 1) * SPACING;
+                getPointInto(segPos[i], d);
+            }
+
+            const perpX = -moveDir.z, perpZ = moveDir.x;
+            for (let i = 0; i < SEGMENTS; i++) {
+                const pos = segPos[i];
+                const phase = i * 0.3 - elapsed * 2.2;
+                const latOff = Math.sin(phase) * 0.15;
+                const yOff = Math.sin(phase * 0.6 + i * 0.08) * 0.12 + 0.4 + Math.sin(elapsed * 3 + i * 0.4) * 0.05;
+                snakeBody[i].position.set(pos.x + perpX * latOff, yOff, pos.z + perpZ * latOff);
+                const pulse = 1 + Math.sin(elapsed * 4 - i * 0.35) * 0.02;
+                snakeBody[i].scale.set(FIXED_SCALE * pulse, FIXED_SCALE * pulse, FIXED_SCALE * pulse);
+            }
+
+            if (eatAnim > 0) eatAnim = Math.max(0, eatAnim - delta * 2.5);
+            mouth.scale.y = 0.3 + eatAnim * 2.5;
+            mouth.scale.x = 1.0 + eatAnim * 0.4;
+
+            const headY = 0.5 + Math.sin(eatAnim * Math.PI) * 0.08 + Math.sin(elapsed * 3) * 0.04;
+            head.position.set(headPosition.x, headY, headPosition.z);
+            head.rotation.y = Math.PI / 2 - dirAngle;
+
+            const tongueOut = Math.max(0, Math.sin(elapsed * 5) * 0.7 + 0.3);
+            tongueGroup.position.z = 1.08 + tongueOut * 0.45;
+            tongueGroup.visible = tongueOut > 0.1;
+
+            _desiredCamPos.copy(headPosition).add(_cameraOffset);
+            camera.position.lerp(_desiredCamPos, 0.08);
+            cameraTarget.lerp(headPosition, 0.08);
+            controls.target.copy(cameraTarget);
+            controls.update();
+
+            if (shakeTime > 0) {
+                shakeTime -= delta;
+                const k = Math.max(0, shakeTime) * shakeMag;
+                camera.position.x += (Math.random() - 0.5) * k;
+                camera.position.y += (Math.random() - 0.5) * k;
+                camera.position.z += (Math.random() - 0.5) * k;
+                if (shakeTime <= 0) { shakeMag = 0; }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.showPage = function(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            isGameActive = (pageId === 'page-game');
+            if (!isGameActive) {
+                forwardHeld = false; backwardHeld = false; keyUpHeld = false; keyDownHeld = false;
+                if (charging) { charging = false; chargePower = 0; }
+            }
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+                if (pageId === 'page-game') { canvas.style.display = 'block'; canvas.classList.add('game-active'); }
+                else { canvas.style.display = 'none'; canvas.classList.remove('game-active'); }
+            }
+        };
+
+        window.finishGame = function(won) {
+            if (gameOver) return;
+            gameOver = true; isGameActive = false;
+            forwardHeld = false; backwardHeld = false; keyUpHeld = false; keyDownHeld = false;
+            charging = false; dashing = false; chargePower = 0;
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
+            }
+
+            const label = document.getElementById('result-label');
+            const emoji = document.getElementById('result-emoji');
+            const winBlock = document.getElementById('win-block');
+            const loseBlock = document.getElementById('lose-block');
+            const tr = translations[currentLang];
+
+            if (won) {
+                label.textContent = tr.resultWinLabel; label.style.color = "#66ddff";
+                emoji.textContent = "🐍"; emoji.className = "result-score red-snake-reward";
+                document.getElementById('reward-text').textContent = tr.rewardText;
+                document.getElementById('result-text-win').textContent = tr.resultWinText;
+                winBlock.style.display = 'block'; loseBlock.style.display = 'none';
+                startConfetti(); speakText('ttsWin');
+            } else {
+                label.textContent = tr.resultTimeLabel; label.style.color = "#99aacc";
+                emoji.textContent = "📦"; emoji.className = "result-score";
+                document.getElementById('result-text-lose').textContent = tr.resultTimeText.replace('{score}', score);
+                winBlock.style.display = 'none'; loseBlock.style.display = 'block';
+                speakText('ttsLose', { score: score });
+            }
+            showPage('page-result');
+        };
+
+        window.startGame = function() {
+            initAudio();
+            score = 0; updateScore();
+            gameTimeLeft = MAX_TIME; updateTimerDisplay();
+            speedMult = 1.0;
+            forwardHeld = false; backwardHeld = false; keyUpHeld = false; keyDownHeld = false;
+            charging = false; dashing = false; chargePower = 0; lastChargeStep = 0;
+            dashTime = 0; dashDuration = 0; dashSpeed = 0; dashPower = 0; cooldown = 0;
+            shakeTime = 0; shakeMag = 0;
+            eatAnim = 0;
+            isGameActive = true; gameOver = false;
+
+            headPosition.set(0, 0, 5); dirAngle = 0; targetAngle = 0;
+            const spiralRadius = 1.0, spiralTurns = 3;
+            for (let i = 0; i < MAX_PATH; i++) {
+                const t = i / MAX_PATH;
+                const angle = t * spiralTurns * 2 * Math.PI;
+                const radius = spiralRadius * (1 - t * 0.3);
+                pathHist[i].set(headPosition.x + Math.cos(angle) * radius, 0, headPosition.z + Math.sin(angle) * radius);
+            }
+            pathWrite = MAX_PATH - 1; pathValid = MAX_PATH;
+            segPos[0].set(headPosition.x, 0, headPosition.z);
+            for (let i = 1; i < SEGMENTS; i++) {
+                segPos[i].set(headPosition.x - i * SPACING * 0.5, 0, headPosition.z);
+            }
+
+            for (let i = 0; i < SEGMENTS; i++) {
+                snakeBody[i].position.set(segPos[i].x, 0.4, segPos[i].z);
+            }
+
+            for (let p of packages) {
+                scene.remove(p.mesh);
+                if (p.mesh.material) p.mesh.material.dispose();
+                if (p.mesh.children) {
+                    for (const child of p.mesh.children) {
+                        if (child.geometry && child.geometry !== parcelGeo && child.geometry !== tapeGeo) child.geometry.dispose();
+                        if (child.material && child.material !== tapeMatBad && child.material !== tapeMatGood) child.material.dispose();
+                    }
+                }
+            }
+            packages.length = 0;
+            spawnTimer = 1.0;
+
+            for (const c of crates) {
+                c.shake = 0; c._lastHitTime = 0;
+                c.group.position.set(c.x, c.baseY, c.z);
+                c.group.rotation.z = 0; c.group.scale.set(1, 1, 1);
+            }
+
+            controls.target.copy(headPosition);
+            camera.position.copy(headPosition).add(_cameraOffset);
+            cameraTarget.copy(headPosition);
+
+            if (timerInterval) clearInterval(timerInterval);
+            startTimer();
+            showPage('page-game');
+            speakText('ttsStart');
+        };
+
+        let _resizeRaf = null;
+        function doResize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(PERF.pixelRatio);
+        }
+        window.addEventListener('resize', () => {
+            if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+            _resizeRaf = requestAnimationFrame(doResize);
+        });
+        window.addEventListener('orientationchange', () => {
+            setTimeout(doResize, 250);
+        });
+
+        updateLanguage();
+        updateScore();
+        document.getElementById('txt-startBtn').addEventListener('click', startGame);
+        animate(0);
+        console.log('✅ Игра "Змея Сортировщик" готова!');
+    </script>
+</body>
+</html>
